@@ -48,7 +48,7 @@
  *   void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
  *       uart_comm_tx_cplt_handler(&comm_vision, huart);
  *       uart_comm_tx_cplt_handler(&comm_chassis, huart);
- *       // ... existing Vofa+ handler ...
+ *       // ... existing JustFloat handler ...
  *   }
  *
  *   void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
