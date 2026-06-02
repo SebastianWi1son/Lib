@@ -45,13 +45,16 @@
 void port_dma_rx_setup(void *port_handle, uint8_t *buf, uint16_t size) {
     UART_HandleTypeDef *h = H(port_handle);
 
-    /* Start DMA reception — continuous (circular) */
-    HAL_UART_Receive_DMA(h, buf, size);
-
-    /* Enable circular mode on the DMA stream itself */
+    /* Set CIRC bit BEFORE HAL_UART_Receive_DMA.
+       At this point the DMA stream is disabled (from MX_DMA_Init / prior abort),
+       so the write to CR takes effect.
+       HAL_DMA_Start_IT internally disables→DMA_SetConfig(doesn't touch CIRC)→enables.
+       Writing CIRC AFTER Start_IT (EN=1) is silently ignored on STM32H7/F7. */
     if (h->hdmarx != NULL) {
-        SET_BIT(h->hdmarx->Instance->CR, DMA_SxCR_CIRC);
+        SET_BIT(((DMA_Stream_TypeDef *)h->hdmarx->Instance)->CR, DMA_SxCR_CIRC);
     }
+
+    HAL_UART_Receive_DMA(h, buf, size);
 }
 
 uint16_t port_dma_rx_pos(void *port_handle, uint16_t buf_size) {
@@ -63,7 +66,10 @@ uint16_t port_dma_rx_pos(void *port_handle, uint16_t buf_size) {
 }
 
 void port_dma_tx_start(void *port_handle, const uint8_t *data, uint16_t len) {
-    HAL_UART_Transmit_DMA(H(port_handle), (uint8_t *)data, len);
+    UART_HandleTypeDef *h = H(port_handle);
+    /* Match old vofa.c pattern: only TX when UART is ready */
+    if (h->gState != HAL_UART_STATE_READY) return;
+    HAL_UART_Transmit_DMA(h, (uint8_t *)data, len);
 }
 
 bool port_dma_tx_busy(void *port_handle) {
@@ -82,11 +88,11 @@ void port_rx_error_recover(void *port_handle, uint8_t *buf, uint16_t size) {
     __HAL_UART_CLEAR_FLAG(h, UART_CLEAR_OREF | UART_CLEAR_NEF |
                               UART_CLEAR_PEF  | UART_CLEAR_FEF);
 
-    /* Restart circular DMA reception */
-    HAL_UART_Receive_DMA(h, buf, size);
+    /* Set CIRC before restarting — AbortReceive disables DMA, so write takes effect */
     if (h->hdmarx != NULL) {
-        SET_BIT(h->hdmarx->Instance->CR, DMA_SxCR_CIRC);
+        SET_BIT(((DMA_Stream_TypeDef *)h->hdmarx->Instance)->CR, DMA_SxCR_CIRC);
     }
+    HAL_UART_Receive_DMA(h, buf, size);
 }
 
 void port_idle_it_enable(void *port_handle) {
